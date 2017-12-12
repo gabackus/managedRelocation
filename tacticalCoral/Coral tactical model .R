@@ -1,6 +1,7 @@
 rm(list=ls())
 library(ggplot2)
 library(reshape2)
+require(RCurl)
 ## Basicl model structure
 
 ##set some intial paramteres
@@ -9,12 +10,9 @@ library(reshape2)
   ##the size of the reef (number of niches wide)
   reef.size <- 20
 
-##source in the functions for life history stratergies
-#source("...")
-  
-##build a data set of the different types of corals (structure and stratergy for growth)
-coral.types<-data.frame(expand.grid(data.frame("Structure"=c("Massive", "Branching", "Folio", "Plating"), "Stratergy"=c("Competitive", "Weedy","Resistant", "Generalist"))))
-coral.types$unique.ID<-paste(coral.types$Structure, coral.types$Stratergy, sep="+")  
+##source in the generic coral data set (from eco let paper)
+  source(getURL("https://raw.githubusercontent.com/chrit88/Changes-bowie/master/bowie%204.txt"))
+
 
 ##simulate an initial structure for the reef (both age and spatial). Current set to randomly select from a uniform distribution for structure
 ##and from a gamma distrubition for age rounded to whole numbers 
