@@ -6,14 +6,14 @@ require(RCurl)
 
 ##set some intial paramteres
   ##length of time series (years)
-  simulation.length <- 100
+  simulation.length <- 10
   ##the size of the reef (number of niches wide)
-  reef.size <- 20
+  reef.size <- 10
 
 ##source in the generic coral data set (from eco let paper). 
   ##needs to link to the github repository, but I cant do this at the moment...
-  ##source(getURL("https://raw.githubusercontent.com/chrit88/Changes-bowie/master/bowie%204.txt"))
-  source('~/Desktop/Work/managedRelocation/tacticalCoral/Generic coral data.R', encoding = 'UTF-8')
+  #source(getURL("https://raw.githubusercontent.com/gabackus/managedRelocation/master/Coral-tactical/Generic%20coral%20data.R"), encoding = 'UTF-8')
+  source('~/Desktop/Work/managedRelocation/Coral-tactical/Generic coral data.R', encoding = 'UTF-8')
   ##look at the dat:
   coral.types
 
@@ -127,8 +127,21 @@ larvae.t$surviving<-round(larvae.t$number*mort)
 ##number of vacant niches:
 free.niches.t<-length(which(is.na(spp.structure.t)))
 
-##create a vector of larvae to settle, and randomly sample from this, add this into the reef (all vectorized):
-spp.structure.t[mort.locations]<-as.character(sample(rep(larvae.t$ID, larvae.t$surviving), size=free.niches.t, replace=F))
+##if there are enough survivng polyps to repopulation all the free niches:
+if(sum(larvae.t$surviving)>free.niches.t){
+  ##create a vector of larvae to settle, and randomly sample from this, add this into the reef (all vectorized):
+  spp.structure.t[mort.locations]<-as.character(sample(rep(larvae.t$ID, larvae.t$surviving), size=free.niches.t, replace=F))
+}else{
+  ##if there arent enough surviing offspring to settle, then doa bit of a hack around.
+  ##calculate the number of larvae free to settle
+  free.larvae<-rep(larvae.t$ID, larvae.t$surviving)
+  ##create a vector of NA's to fill
+  na.free.niches<-rep(NA, length=free.niches.t)
+  ##fill as many as there are free polyps, leaving some NA's left over
+  na.free.niches[1:length(rep(larvae.t$ID, larvae.t$surviving))]<-as.character(rep(larvae.t$ID, larvae.t$surviving))
+  ##randomize the order of these so that the settlement in space is randome
+  spp.structure.t<-sample(na.free.niches, length(na.free.niches), replace=F)
+}
 
 ##update the age structure to have those nices that are filled (which will be all, is that ok?) as age 0:
 age.structure.t[mort.locations]<-0
