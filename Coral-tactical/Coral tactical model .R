@@ -13,7 +13,11 @@ require(RCurl)
 ##source in the generic coral data set (from eco let paper). 
   ##needs to link to the github repository, but I cant do this at the moment...
   #source(getURL("https://raw.githubusercontent.com/gabackus/managedRelocation/master/Coral-tactical/Generic%20coral%20data.R"), encoding = 'UTF-8')
-  source('~/Desktop/Work/managedRelocation/Coral-tactical/Generic coral data.R', encoding = 'UTF-8')
+  #source('~/Desktop/Work/managedRelocation/Coral-tactical/Generic coral data.R', encoding = 'UTF-8')
+  ##gb: This might work a little bit better
+  cor.dat <- getURL("https://raw.githubusercontent.com/gabackus/managedRelocation/master/Coral-tactical/Generic%20coral%20data.R", ssl.verifypeer = FALSE)
+  eval(parse(text = cor.dat))
+
   ##look at the dat:
   coral.types
 
@@ -173,3 +177,30 @@ results.size[i,]<-size.structure.t
 results.gen[i,]<-gen.time.t
 ################################################################################################################################
 }##end loop
+
+##gb: I added some stuff to help me visualize the model a little bit better
+##This could probably look a little cleaner. I'm not completely fluent in R yet.
+
+##This matrix is to convert the results to population size
+##We might want to convert this to proportions (by simply dividing by the reef size)
+##or think about other appropriate diversity indices (richness, inverse Simpson's, etc.)
+##There is a column for each unique coral type and a row for each time step
+results.pop.size<-matrix(0,simulation.length,length(coral.types$unique.ID))
+
+##This converts results.str to population sizes
+for (j in 1:length(coral.types$unique.ID)){
+  results.pop.size[,j]<-rowSums(results.str==coral.types$unique.ID[j])
+}
+
+##This makes it a dataframe
+pop.size.df<-as.data.frame(results.pop.size)
+##Names the columns
+colnames(pop.size.df)<-coral.types$unique.ID
+##Adds time as a column
+pop.size.df$Time=1:simulation.length
+
+##I ended up plotting it as proportions
+ggplot((melt(pop.size.df,id='Time')),aes(x=Time,y=value/reef.size,fill=variable))+
+  geom_area(colour="black", size=2, alpha=.4) +
+  scale_fill_manual(values=rainbow(12))+
+  ylab('Proportion of reef')
