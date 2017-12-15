@@ -3,7 +3,8 @@
 ##also changed "massive" to "domed" in line with their useage
 ## reading the description of the speacies in the paper it seems like brooding vs spawing is a big deal, do we definatly want to not include this?
 coral.types<-data.frame(expand.grid("Structure"=c("Domed", "Branching", "Plating"), "Stratergy"=c("Competitive", "Weedy","Stress tolerant", "Generalist")))
-coral.types$unique.ID<-paste(coral.types$Structure, coral.types$Stratergy, sep="+")  
+coral.types$unique.ID<-paste(coral.types$Structure, coral.types$Stratergy, sep="+") 
+coral.types$numeric.code<-c(1:nrow(coral.types))
 coral.types$probability.occurance<-c(0, 95.7, 39.1, 56.5, 39.1, 21.7, 100, 0, 1.7, 100, 35.7, 100)
 ##not quite sure what these proabbilities refer to at the moment, so I have normalised by stratergy them and used them to draw the random structure:
 coral.types$norm.prob<-NA
