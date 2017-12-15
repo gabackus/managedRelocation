@@ -1,5 +1,4 @@
 rm(list=ls())
-set.seed(1)
 library(ggplot2)
 library(reshape2)
 require(RCurl)
@@ -7,9 +6,9 @@ require(RCurl)
 
 ##set some intial paramteres
   ##length of time series (years)
-  simulation.length <- 100
+  simulation.length <- 30
   ##the size of the reef (number of niches wide)
-  reef.size <- 100
+  reef.size <- 10
 
 ##source in the generic coral data set (from eco let paper). 
   ##needs to link to the github repository, but I cant do this at the moment...
@@ -21,6 +20,7 @@ require(RCurl)
 
   ##look at the dat:
   coral.types
+  coral.types$numeric.code<-as.numeric(row.names(coral.types))
 
 ##simulate an initial structure for the reef (both age and spatial). Current set to randomly select (by weighting)
 ##and from a gamma distrubition for age rounded to whole numbers 
@@ -170,18 +170,22 @@ results.gen<-matrix(NA, nrow=simulation.length, ncol=reef.size)
   ################################################################################################################################
   ##generate a generation time for the new individuals and add it into the results
   gen.time.t[mort.locations]<-round(rnorm(coral.types$gen.time[match(spp.structure.t[mort.locations], coral.types$unique.ID)], coral.types$gen.time[match(spp.structure.t[mort.locations], coral.types$unique.ID)], coral.types$gen.time.sd[match(spp.structure.t[mort.locations], coral.types$unique.ID)]))
+
   ################################################################################################################################
   ##save out results as two data frames:
     ##1) age structure at each time step
     ##2) spp structure at each time step
   ##saved as rows in a maxtrix (created above), coded to be used in a loop with year=i
+  size.structure.t[which(is.nan(size.structure.t))]<-NA
+  age.structure.t[which(is.nan(age.structure.t))]<-NA
+  gen.time.t[which(is.nan(gen.time.t))]<-NA
   
   results.str[i,]<-spp.structure.t
   results.age[i,]<-age.structure.t
   results.size[i,]<-size.structure.t
   results.gen[i,]<-gen.time.t
   ################################################################################################################################
-  #if(length(which(!is.na(spp.structure.t)))==0){break("all dead")}
+  if(length(which(!is.na(spp.structure.t)))==0){break("all dead")}
   ################################################################################################################################
 }##end loop
 
@@ -215,4 +219,4 @@ ggplot((melt(pop.size.df,id='Time')),aes(x=Time,y=value/reef.size,fill=variable)
 ##the other option is as an image:
 ##convert to numeric
 num.str<-matrix(coral.types$numeric.code[match(results.str, coral.types$unique.ID)],nrow=simulation.length, ncol=reef.size) 
-image(num.str)
+#image(num.str)
