@@ -2,13 +2,14 @@ rm(list=ls())
 library(ggplot2)
 library(reshape2)
 require(RCurl)
+#set.seed(32)
 ## Basicl model structure
 
 ##set some intial paramteres
   ##length of time series (years)
-  simulation.length <- 30
+  simulation.length <- 200
   ##the size of the reef (number of niches wide)
-  reef.size <- 10
+  reef.size <- 15
 
 ##source in the generic coral data set (from eco let paper). 
   ##needs to link to the github repository, but I cant do this at the moment...
@@ -72,9 +73,9 @@ results.gen<-matrix(NA, nrow=simulation.length, ncol=reef.size)
   results.size[1,]<-initial.size.structure
   results.gen[1,]<-initial.gen.time
   
-#for(i in 2:simulation.length){
-  for(i in 2:40){
-  #i=2
+for(i in 2:simulation.length){
+  #for(i in 2:47){
+  #i=48
   ################################################################################################################################    
   ##the structures from the previous year, these will then get updated in the loop:
   spp.structure.t<-results.str[i-1,]
@@ -99,7 +100,7 @@ results.gen<-matrix(NA, nrow=simulation.length, ncol=reef.size)
     # 
     ##for the moment lets add in some empty niches so we can code:
     ##the lcoations in space of thos that have died
-    mort.locations<-sample(1:reef.size, rpois(1, 1.5))
+    mort.locations<-sample(1:reef.size, rpois(1, 5))
     spp.structure.t[mort.locations]<-NA
     age.structure.t[mort.locations]<-NA
     size.structure.t[mort.locations]<-NA
@@ -117,26 +118,28 @@ results.gen<-matrix(NA, nrow=simulation.length, ncol=reef.size)
     fec.sd.t<-coral.types$fecundity.sd[match(spp.structure.t, coral.types$unique.ID)]
     ##only keep the ones that are old enough to reproduce  
     fec.t[which(age.structure.t<gen.time.t)]<-NA
-    fec.sd.t[which(age.structure.t<gen.time.t)]<-NA
-    fec.location <- log(fec.t^2 / sqrt(fec.sd.t^2 + fec.t^2))
-    fec.shape <- sqrt(log(1 + (fec.sd.t^2 / fec.t^2)))
-  
-    larvae.t<-na.omit(data.frame(ID=spp.structure.t, number=rlnorm(fec.t, meanlog = fec.location, sdlog = fec.shape)))
-    ################################################################################################################################
-    ##then mortality in the larval stages (probably just uniform mortality (e.g. 0.01% survive)). This will introduce allee effects
-    ##needs to be temperature dependant 
-    ##currently just fixed to 50%
-    mort<-0.5
+    ##if there are indivudals old enough to reproduce:
+    if(length(which(!is.na(fec.t)))>0){
+      fec.sd.t[which(age.structure.t<gen.time.t)]<-NA
+      fec.location <- log(fec.t^2 / sqrt(fec.sd.t^2 + fec.t^2))
+      fec.shape <- sqrt(log(1 + (fec.sd.t^2 / fec.t^2)))
     
-    ##calculate the remining larvae availble to settle
-    larvae.t$surviving<-round(larvae.t$number*mort)
-    ################################################################################################################################
-    ##then settlement (not temperature dependant):
-    ##number of vacant niches:
-    free.niches.t<-length(which(is.na(spp.structure.t)))
-    
+      larvae.t<-na.omit(data.frame(ID=spp.structure.t, number=rlnorm(fec.t, meanlog = fec.location, sdlog = fec.shape)))
+      ################################################################################################################################
+      ##then mortality in the larval stages (probably just uniform mortality (e.g. 0.01% survive)). This will introduce allee effects
+      ##needs to be temperature dependant 
+      ##currently just fixed to 50%
+      mort<-0.5
+      
+      ##calculate the remining larvae availble to settle
+      larvae.t$surviving<-round(larvae.t$number*mort)
+      ################################################################################################################################
+      ##then settlement (not temperature dependant):
+      ##number of vacant niches:
+      free.niches.t<-length(mort.locations)
+      
     ##if there are enough survivng polyps to repopulation all the free niches:
-    if(sum(larvae.t$surviving)>free.niches.t){
+      if(sum(larvae.t$surviving)>=free.niches.t){
       ##create a vector of larvae to settle, and randomly sample from this, add this into the reef (all vectorized):
       spp.structure.t[mort.locations]<-as.character(sample(rep(larvae.t$ID, larvae.t$surviving), size=free.niches.t, replace=F))
     }else{
@@ -149,9 +152,10 @@ results.gen<-matrix(NA, nrow=simulation.length, ncol=reef.size)
         ##fill as many as there are free polyps, leaving some NA's left over
         na.free.niches[1:length(rep(larvae.t$ID, larvae.t$surviving))]<-as.character(rep(larvae.t$ID, larvae.t$surviving))
         ##randomize the order of these so that the settlement in space is randome
-        spp.structure.t<-sample(na.free.niches, length(na.free.niches), replace=F)
+        spp.structure.t[mort.locations]<-sample(na.free.niches, length(na.free.niches), replace=F)
       }
     }
+    
     ##update the age structure to have those nices that are filled (which will be all, is that ok?) as age 0:
     age.structure.t[mort.locations]<-0
     ################################################################################################################################
@@ -160,7 +164,9 @@ results.gen<-matrix(NA, nrow=simulation.length, ncol=reef.size)
     ##add in the zeroes (just settled corals)
     size.structure.t[mort.locations]<-0
   ##close the if statement about reproduction
+    }
   }
+  
   ##then add on growh for each type based on the table 
   growth.t<-coral.types$growth[match(spp.structure.t, coral.types$unique.ID)]
   growth.sd.t<-coral.types$growth.sd[match(spp.structure.t, coral.types$unique.ID)]
@@ -169,7 +175,7 @@ results.gen<-matrix(NA, nrow=simulation.length, ncol=reef.size)
   size.structure.t<-size.structure.t+rlnorm(growth.t, meanlog = grow.location, sdlog = grow.shape)
   ################################################################################################################################
   ##generate a generation time for the new individuals and add it into the results
-  gen.time.t[mort.locations]<-round(rnorm(coral.types$gen.time[match(spp.structure.t[mort.locations], coral.types$unique.ID)], coral.types$gen.time[match(spp.structure.t[mort.locations], coral.types$unique.ID)], coral.types$gen.time.sd[match(spp.structure.t[mort.locations], coral.types$unique.ID)]))
+  gen.time.t[mort.locations]<-round(rnorm(length(coral.types$gen.time[match(spp.structure.t[mort.locations], coral.types$unique.ID)]), coral.types$gen.time[match(spp.structure.t[mort.locations], coral.types$unique.ID)], coral.types$gen.time.sd[match(spp.structure.t[mort.locations], coral.types$unique.ID)]))
 
   ################################################################################################################################
   ##save out results as two data frames:
@@ -187,7 +193,7 @@ results.gen<-matrix(NA, nrow=simulation.length, ncol=reef.size)
   ################################################################################################################################
   if(length(which(!is.na(spp.structure.t)))==0){break("all dead")}
   ################################################################################################################################
-}##end loop
+}##end loop 
 
 ##gb: I added some stuff to help me visualize the model a little bit better
 ##This could probably look a little cleaner. I'm not completely fluent in R yet.
@@ -214,9 +220,9 @@ pop.size.df$Time=1:simulation.length
 ggplot((melt(pop.size.df,id='Time')),aes(x=Time,y=value/reef.size,fill=variable))+
   geom_area(colour="black", size=2, alpha=.4) +
   scale_fill_manual(values=rainbow(12))+
-  ylab('Proportion of reef')
+  ylab('Proportion of reef')+theme_bw()
 
 ##the other option is as an image:
 ##convert to numeric
 num.str<-matrix(coral.types$numeric.code[match(results.str, coral.types$unique.ID)],nrow=simulation.length, ncol=reef.size) 
-#image(num.str)
+image(num.str)
