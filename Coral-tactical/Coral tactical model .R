@@ -10,6 +10,9 @@ require(RCurl)
   simulation.length <- 200
   ##the size of the reef (number of niches wide)
   reef.size <- 15
+  ##gb: needed for new mortality calculations
+  locations <- 1:reef.size
+
 
 ##source in the generic coral data set (from eco let paper). 
   ##needs to link to the github repository, but I cant do this at the moment...
@@ -60,7 +63,8 @@ results.age<-matrix(NA, nrow=simulation.length, ncol=reef.size)
 results.size<-matrix(NA, nrow=simulation.length, ncol=reef.size)
 results.gen<-matrix(NA, nrow=simulation.length, ncol=reef.size)
 
-
+## gb: Each individual adult will have a some chance of dying each time step
+adult.mortality<-0.1
 ################################################################################################################################
 ##the simulation:
 
@@ -100,7 +104,11 @@ for(i in 2:simulation.length){
     # 
     ##for the moment lets add in some empty niches so we can code:
     ##the lcoations in space of thos that have died
-    mort.locations<-sample(1:reef.size, rpois(1, 5))
+    #mort.locations<-sample(1:reef.size, rpois(1, 5))
+    ## gb: To make mortality scale better with the reef size, we can give each individual some chance of dying
+    ## gb: For now, we can take a uniform random number between 0 and 1 for each space.
+    ## gb: Every time that random number is less than adult.mortality, the individual dies.
+    mort.locations<-locations[runif(reef.size)<adult.mortality]
     spp.structure.t[mort.locations]<-NA
     age.structure.t[mort.locations]<-NA
     size.structure.t[mort.locations]<-NA
@@ -112,7 +120,8 @@ for(i in 2:simulation.length){
   ##needs to be temp dependant? or is this just acccounted for in mortality in the adult and polyp stages?
     
   ##at the moment this is just an amount drawn from a log normal distribution, roughly based on coral.types
-    fec.t<-coral.types$fecundity[match(spp.structure.t, coral.types$unique.ID)]
+  ##gb: Coral size doesn't do much with the current model. For simplicity, I think we should multiply the fecundity by the coral's size. 
+    fec.t<-coral.types$fecundity[match(spp.structure.t, coral.types$unique.ID)]*size.structure.t
   ##if there are individuals that are old enough to reproduce:
   if(length(which(!is.na(fec.t)))>0){
     fec.sd.t<-coral.types$fecundity.sd[match(spp.structure.t, coral.types$unique.ID)]
