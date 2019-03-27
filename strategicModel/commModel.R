@@ -716,9 +716,3 @@ commTrim <- function(n,P){
   cData2<-commData(XW,sim2,P2)
   
   pt2<-proc.time()
-  
-  
-  
-  
-  
-#}
