@@ -417,7 +417,7 @@ commSimulate <- function(n,P,X,years=100,extInit=F,extThresh=100){
   }
   X$y<-X$y+i
   i<-i+1
-  return(list(n=n,N=N[,1:i],temps=temps[1:i],X=X))
+  return(list(n=n,N=N[,1:i,drop=F],temps=temps[1:i,drop=F],X=X))
 }
 
 timeStep <- function(n,P,X){
@@ -429,10 +429,10 @@ timeStep <- function(n,P,X){
   
   dS<-which(rowSums(n1)>0)
   if(!isempty(dS)){
-    dispn<-n1[dS,,]
+    dispn<-n1[dS,,,drop=F]
     dispn2 <- disperse(dispn,X$L,X$W,P$S,P$K[dS])
     n2 <- n1
-    n2[dS,,]<-dispn2
+    n2[dS,,,drop=F]<-dispn2
   } else {
     n2<-n1
   }
@@ -517,7 +517,7 @@ compete <- function(n,L,W,S,Q,A,compType='lottery',z=NULL,sig=NULL,ro=NULL,lam=N
   
   p<-1/(1+QR*anR)
 
-  nc <- (sapply(1:S,function(s) mapply(rbinom,1,c(n[s,,]),p[s,,])))
+  nc <- (sapply(1:S,function(s) mapply(rbinom,1,c(n[s,,,drop=F]),p[s,,,drop=F])))
   nc2 <- array(t(nc),c(S,L,W))
 
   return(nc2)
@@ -592,10 +592,10 @@ topSpecies <- function(n,L,W){
   tSpec <- matrix(NA,L,W)
   for(i in 1:L){
     for(j in 1:W){
-      nij <- n[,i,j]
+      nij <- n[,i,j,drop=F]
       if(sum(nij)>0){
         nij<-nij+runif(32,0,0.001)
-        tSpec[i,j]<-which.max(nij)
+        tSpec[i,j,drop=F]<-which.max(nij)
       }
     }
   }
