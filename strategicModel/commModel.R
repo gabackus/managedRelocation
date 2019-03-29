@@ -7,6 +7,7 @@ commSetup <- function(S=32, L=512, W=8,
                       gamMean=2.5, gamSD=2.5,
                       sigMean=5, sigSD=5,
                       lam=-2.7, B=10,
+                      compType="lottery",
                       XW=seq(129,384),
                       temp2d=NULL,
                       tempLow=9.78, tempHigh=30.22,
@@ -39,6 +40,7 @@ commSetup <- function(S=32, L=512, W=8,
   # sigSD:    Standard deviation of thermal tolerance breadth for randomized species. Default is based on Urban et al. 2012.
   # lam:      Skewness in thermal tolerance. Default is based on Urban et al. 2012. (to have a mild decrease moving toward colder temperatures and a sharp decrease moving toward warmer temperatures).
   # B:        Area of integrated birth rate over all T for each species.
+  # compType: The type of competition in a string. Must be either "lottery" or "temp".
   
   # XW:       Window of analysis (to remove edge effects)
   
@@ -152,7 +154,8 @@ commSetup <- function(S=32, L=512, W=8,
          A=A,
          ro=ro,
          zo=zo,
-         K=K)
+         K=K,
+         compType=compType)
   
   ##########################################################
   # Next, we define environmental parameters.
@@ -160,19 +163,22 @@ commSetup <- function(S=32, L=512, W=8,
   x <- seq(1,L)
   # temp2d is the current temperature over all x and microhabitats
   if(is.null(temp2d)){
-      
+    
     temp1dr <- seq(tempHigh,tempLow,length=L)
     if(tempRev){
       temp1dr<-rev(temp1dr)
     }
-    
     tempG <- tempVarH(L,tempGH)
     temp1d <- temp1dr+tempG*tempGSD
-    
-    temp2dr <- matrix(temp1d,L,W)
-    tempLH <- matrix(rnorm(L*W,0,tempLSD),L,W)
-    tempLH <- t(matrix(sapply(1:L, function(x) sort(tempLH[x,]-mean(tempLH[x,]))),W,L))
-    temp2d <- temp2dr+tempLH
+    if(W>1){
+      temp2dr <- matrix(temp1d,L,W)
+      tempLH <- matrix(rnorm(L*W,0,tempLSD),L,W)
+      tempLH <- t(matrix(sapply(1:L, function(x) sort(tempLH[x,]-mean(tempLH[x,]))),W,L))
+      temp2d <- temp2dr+tempLH
+    } else{
+      temp2d<-temp1d
+    }
+
   } else {
     if(!(nrow(temp2d)==L & ncol(tempsd)==W)){
       stop("temp2d does not match environment size!")
@@ -197,9 +203,13 @@ commSetup <- function(S=32, L=512, W=8,
     Qr1 <- matrix(QMean,L,W)
     QG <- tempVarH(L,QGH)
     Qr2 <- Qr1+QG*QGSD
-    QLH <- matrix(rnorm(L*W,0,QLSD),L,W)
-    QLH <- t(matrix(sapply(1:L, function(x) sort(QLH[x,]-mean(QLH[x,]))),W,L))
-    
+    if(W>1){
+      QLH <- matrix(rnorm(L*W,0,QLSD),L,W)
+      QLH <- t(matrix(sapply(1:L, function(x) sort(QLH[x,]-mean(QLH[x,]))),W,L))
+    }
+    else{
+      QLH<-0
+    }
     Q <- Qr2+QLH
     
   } else {
@@ -389,8 +399,9 @@ commSimulate <- function(n,P,X,years=100,extInit=F,extThresh=100){
     temps[i+1]=mean(X$temp1d)
     
     # Run the time step function for population adjustment after the change in temperature
-    n <- timeStep(n,P,X)
-    
+    if(sum(N[,i])>0){
+      n <- timeStep(n,P,X)
+    }
     # Record the population size
     N[,i+1]<-apply(n,1,sum)
     
@@ -414,13 +425,18 @@ timeStep <- function(n,P,X){
   # Each time step could be one "year" or one "generation", but ultimately it runs through each part of the life cycle in an order determined by lcOrder.
   # The various management techniques can optionally be added to the model between any two of the required steps
   # reproduction -> dispersal -> density dependence
+  n1 <- reproduce(n,X$L,X$W,P$S,P$z,P$sig,P$ro,P$lam,X$temp2d)
   
-  n1 <- reproduce(n,P,X)
-
-  n2 <- disperse(n1,P,X)
-  
-  n <- compete(n2,P,X)
-  
+  dS<-which(rowSums(n1)>0)
+  if(!isempty(dS)){
+    dispn<-n1[dS,,]
+    dispn2 <- disperse(dispn,X$L,X$W,P$S,P$K[dS])
+    n2 <- n1
+    n2[dS,,]<-dispn2
+  } else {
+    n2<-n1
+  }
+  n <- compete(n2,X$L,X$W,P$S,X$Q,P$A,P$compType,P$z,P$sig,P$ro,P$lam,X$temp2d)
   return(n)
 }
 
@@ -430,40 +446,41 @@ bi <- function(z,sig,ro,lam,temp){
   return(op)
 }
   
-reproduce <- function(n,P,X){
+reproduce <- function(n,L,W,S,z,sig,ro,lam,temp2d){
   # The number of offspring born for each species in each location is a Poisson random variable with mean r*n
   
   # The base reproductive rate is a skewed function, adjust such that min(r)=0 and max(r)=2
   # Each species will have a different reproductive rate depending on the temperature at that space.
-  r <- sapply(1:P$S, function(i) bi(P$z[i],P$sig[i],P$ro[i],P$lam,X$temp2d))
+
+  r <- sapply(1:S, function(i) bi(z[i],sig[i],ro[i],lam,temp2d))
   R <- exp(r)
-  R <- aperm(array(R,c(X$L,X$W,P$S)),c(3,1,2))
+  R <- aperm(array(R,c(L,W,S)),c(3,1,2))
   
   # Mean number of offspring
   rn <-c(R*n)
   
   # The number of offspring is a Poisson random variable with lambda=r*n
-  nr<-array(sapply(rn, function(x) rpois(1,x)),c(P$S,X$L,X$W))
+  nr<-array(sapply(rn, function(x) rpois(1,x)),c(S,L,W))
 
   return(nr)
 }
 
-disperse <- function(n,P,X){
+disperse <- function(n,L,W,S,K){
   # Each individual spreads throughout the spatial landscape with a random double geometric dispersal kernel determined by the species' mean dispersal distance, gam[i].
   # For each species in each location, disperse!
-  dSpecies<-which(rowSums(n)>0)
-  nd<-n
-  
-  if(length(dSpecies)){
-    ndd<-apply(nd,c(1,2),sum)
-    
-    Si<-length(dSpecies)
-    ndd <- t(sapply(dSpecies,function(j) disperseDoubGeom(ndd[j,],X$L,P$K[[j]])))
-    nddd <- c(sapply(1:Si, function(i) t(sapply(1:X$L,function(j) rebin(sample(1:X$W,ndd[i,j],replace=T),X$W)))))
-    ndd <- aperm(array(nddd,c(X$L,X$W,Si)),c(3,1,2))
-    nd[dSpecies,,]<-ndd
+
+  Si<-nrow(n)
+  if(is.null(Si)){
+    n<-array(n,c(S,L,W))
+    Si<-S
   }
-  return(nd)
+  
+  n1<-apply(n,c(1,2),sum)
+  n2 <- t(sapply(1:Si,function(j) disperseDoubGeom(n1[j,],L,K[[j]])))
+  n3 <- c(sapply(1:Si, function(i) t(sapply(1:L,function(j) rebin(sample(1:W,n2[i,j],replace=T),W)))))
+  n4 <- aperm(array(n3,c(L,W,Si)),c(3,1,2))
+
+  return(n4)
 }
 
 disperseDoubGeom <- function(n,L,K){
@@ -478,7 +495,7 @@ disperseDoubGeom <- function(n,L,K){
   return(n3)
 }
 
-compete <- function(n,P,X){
+compete <- function(n,L,W,S,Q,A,compType='lottery',z=NULL,sig=NULL,ro=NULL,lam=NULL,temp2d=NULL){
   # The density dependence in this model is roughly a Beverton-Holt model that includes both interspecific and intraspecific competition
   # Each individual has a random chance of survival based on a variety of conditions
   
@@ -486,20 +503,22 @@ compete <- function(n,P,X){
   # These can be thought of as temperature-varying Lotka-Volterra competition coefficients
   # Probability of survival depends on competition coefficients, number of individuals of each different species at that location, and the quality of the habitat at that location
   
-  r <- sapply(1:P$S, function(i) bi(P$z[i],P$sig[i],P$ro[i],P$lam,X$temp2d))
-  R <- exp(r)
-
-  an <- sapply(0:(X$W-1), function(j) sapply(1:X$L, function(i) sum(R[i+j*X$L,]*n[,i,j+1])))
-
-  p <- sapply(1:P$S, function(s) 1/(1+c(an)/(c(R[,s])*X$Q)))
-
+  if(compType=="temp"){
+    r <- sapply(1:S, function(i) bi(z[i],sig[i],ro[i],lam,temp2d))
+    R<- aperm(array(exp(r),c(L,W,S)),c(3,1,2))
+  } else if(compType=="temp"){
+    R<-1
+  }
+  Qrep<-array(rep(Q,each=S),c(S,L,W))
+  QR<-1/(Qrep*R)
+  nR<-R*n
+  anR<-sapply(1:S, function(s) colSums(A[s,]*nR))
+  anR<-aperm(array(anR,c(L,W,S)),c(3,1,2))
   
-  # For each species in each location, compete!
-  # Number of individuals remaining after competition is a biomial random variable with
-  # n is the number of individuals of species i in location x
-  # p is probability of survival
-  nc <- (sapply(1:P$S,function(s) mapply(rbinom,1,c(n[s,,]),p[,s])))
-  nc2 <- array(t(nc),c(P$S,X$L,X$W))
+  p<-1/(1+QR*anR)
+
+  nc <- (sapply(1:S,function(s) mapply(rbinom,1,c(n[s,,]),p[s,,])))
+  nc2 <- array(t(nc),c(S,L,W))
 
   return(nc2)
 }
@@ -527,33 +546,42 @@ rebin <- function(ub,L){
 }
 
 
-invSimp <- function(n,type='alpha'){
-  # Calculates the inverse Simpson's diversity index of a matrix of population sizes
+diversityIndex <- function(n,type="alpha",index="invSimp"){
+  # Calculates the diversity index of a matrix of population sizes
   if(type=='alpha'){
     p <- t(n)/colSums(n)
     p2 <- rowSums(p^2)
     p2[is.nan(p2)] <- 1
-    D <- mean(1/p2) 
+    if(index=="invSimp"){
+      D <- mean(1/p2)
+    } else if(index=="giniSimp"){
+      D <- 1- mean(p2)
+    }
   } else if (type=='gamma'){
     p <- rowSums(n)/sum(n)
     D <- 1/sum(p^2)
+    if(index=="invSimp"){
+      D <- 1/sum(p^2)
+    } else if(index=="giniSimp"){
+      D <- 1- sum(p^2)
+    }  
   }
   return(D)
 }
 
-commTrim <- function(n,P){
+commTrim <- function(n,P,X){
   # Remove extinct species from n and P
-  nFlat <- t(sapply(1:P$S, function(s) rowSums(n[s,,])))
+  nFlat <- t(sapply(1:P$S, function(s) rowSums(n[s,,,drop=FALSE])))
   extant <- which(rowSums(nFlat)>0)
   P$S <- length(extant)
-  P$z <- P$z[extant]
-  P$gam <- P$gam[extant]
-  P$sig <- P$sig[extant]
-  P$A <- P$A[extant,extant]
-  P$ro <- P$ro[extant]
-  P$zo <- P$zo[extant]
+  P$z <- P$z[extant,drop=FALSE]
+  P$gam <- P$gam[extant,drop=FALSE]
+  P$sig <- P$sig[extant,drop=FALSE]
+  P$A <- P$A[extant,extant,drop=FALSE]
+  P$ro <- P$ro[extant,drop=FALSE]
+  P$zo <- P$zo[extant,drop=FALSE]
   P$K <- P$K[extant]
-  n <- n[extant,,]
+  n <- n[extant,,,drop=FALSE]
   ct <- list(n=n,P=P)
   return(ct)
 }
@@ -587,9 +615,9 @@ vComSide<-function(n,S){
 id<-1
 set.seed(id)
 
-S <- 32
+S <- 1
 L <- 512
-W <- 8
+W <- 1
 tau <- 0.04
 tempYSD <- 0.2
 tempLSD <- 1
@@ -598,7 +626,7 @@ QMean=4
 iYears <- 200
 ccYears <- 100
 
-cSetup<-commSetup(S=S,L=L,W=W,tau=0,years=iYears+ccYears,tempYSD=tempYSD,tempLSD=tempLSD,QMean=QMean)
+cSetup<-commSetup(S=S,L=L,W=W,compType="temp",tau=0,years=iYears+ccYears,tempYSD=tempYSD,tempLSD=tempLSD,QMean=QMean)
 P0<-cSetup$P
 X0<-cSetup$X
 
@@ -609,7 +637,7 @@ cSim1<-commSimulate(n0,P0,X0,years=iYears)
 
 n0f <- cSim1$n
 
-ct1 <- commTrim(n0f,P0)
+ct1 <- commTrim(n0f,P0,X0)
 n1 <- ct1$n
 P1 <- ct1$P
 
@@ -618,9 +646,8 @@ X1$tau <- tau
 
 cSim2<-commSimulate(n1,P1,X1,years=ccYears)
 
-n1f <- cSim1$n
+n1f <- cSim2$n
 
-ct2 <- commTrim(n1f,P1)
+ct2 <- commTrim(n1f,P1,X1)
 n2 <- ct2$n
 P2 <- ct2$P
-
