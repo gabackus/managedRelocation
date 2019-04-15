@@ -199,7 +199,7 @@ commSetup <- function(S=32, L=512, W=8,
     } else{
       temp2d<-temp1d
     }
-
+    
   } else {
     if(!(nrow(temp2d)==L & ncol(tempsd)==W)){
       stop("temp2d does not match environment size!")
@@ -218,7 +218,7 @@ commSetup <- function(S=32, L=512, W=8,
       stop("tempY does not match years!")
     }
   }
-    
+  
   # Habitat quality could differ in space or with species, but we will keep it constant for now
   if(is.null(Q)){
     Qr1 <- matrix(QMean,L,W)
@@ -273,7 +273,7 @@ tempVarH <-  function(L,H,cZero=T){
   ###        When H is near 0, then autocorrelation is negative and positive values will more often be followed by negative values (and vice versa).
   # L:     Length of the temperature gradient.
   # cZero: If T, it will center the whole output so the mean is 0.
-
+  
   
   # random phases uniformly distributed on [0,2pi]
   phif <- runif(L)*2*pi
@@ -401,7 +401,7 @@ commSimulate <- function(n,P,X,years=100,extInit=F,extThresh=100,manage=NULL){
   N <- matrix(0,P$S,years+1)
   # Record the total initial population size of each species across the whole ecosystem
   N[,1] <- apply(n,1,sum)
-
+  
   # Temperature changes over time, so we need to adjust this over the course of the model
   temp0 <- X$temp1d-X$tempY[y]
   temp2d0 <- X$temp2d-X$tempY[y]
@@ -413,16 +413,16 @@ commSimulate <- function(n,P,X,years=100,extInit=F,extThresh=100,manage=NULL){
   # Keep track of tempY and tau outside of X
   tempY <- X$tempY
   tau <- X$tau
-
+  
   # Used to track the last time an extinction occurred
   lastExtinction <- 0
-
+  
   # Run the model for a number of time steps equal to 'years'
   for (i in 1:years){
     # Temperature changes before each time step
     X$temp1d=temp0+tau*i+tempY[i+y]
     X$temp2d=temp2d0+tau*i+tempY[i+y]
-
+    
     # save the mean temperature
     temps[i+1]=mean(X$temp1d)
     
@@ -502,7 +502,7 @@ bi <- function(z,sig,ro,lam,temp){
   op<-ro*(exp(-((temp-z)/sig)^2)*(1+erf(lam*(temp-z)/sig))-1)
   return(op)
 }
-  
+
 reproduce <- function(n,L,W,S,z,sig,ro,lam,temp2d){
   # The number of offspring born for each species in each location is a Poisson random variable with mean r*n
   
@@ -520,14 +520,14 @@ reproduce <- function(n,L,W,S,z,sig,ro,lam,temp2d){
   
   # The number of offspring is a Poisson random variable with mean=R*n
   nr<-array(sapply(rn, function(x) rpois(1,x)),c(S,L,W))
-
+  
   return(nr)
 }
 
 disperse <- function(n,L,W,S,K){
   # Each individual spreads throughout the spatial landscape with a random double geometric dispersal kernel determined by the species' mean dispersal distance, gam[i].
   # For each species in each location, disperse!
-
+  
   # Si is the total number of species that are dispersing 
   Si <- nrow(n)
   
@@ -636,27 +636,26 @@ compete <- function(n,L,W,S,Q,A,compType='lottery',z=NULL,sig=NULL,ro=NULL,lam=N
   
   # Convert this into survival probability
   p <- 1/(1+QR*anR)
-
+  
   # Binomial random variables to see who survives
   nc <- (sapply(1:S,function(s) mapply(rbinom,1,c(n[s,,]),p[s,,])))
   # Converted into proper SxLxW form
   nc2 <- array(t(nc),c(S,L,W))
-
+  
   return(nc2)
 }
 
 assistMigrate<-function(n,N,L,W,temp1d,t,AM){
-  
   # Attach AM parameters
   tLR <- AM$tLR; targs <- AM$targs; eta <- AM$eta; tCD <- AM$tCD
-
+  
   # Preallocate the output arrays
   # nR is the array of relocated individuals
   nR <- n*0
   # nD is the array of individuals that will disperse naturally instead of assisted migration
   nD <- n
-
-
+  
+  
   ##########################################################
   # DO WE DO ANY ASSISTED MIGRATION DURING THIS TIME STEP? #
   ##########################################################
@@ -667,6 +666,7 @@ assistMigrate<-function(n,N,L,W,temp1d,t,AM){
   
   # We only need to go through this bit if there are going to be any relocations during this time step
   if(!isempty(SReloc)){
+    
     # Attach AM parameters
     rho <- AM$rho; mu <- AM$mu; zEst <- AM$zEst; xLoc <- AM$xLoc; recRad <- AM$recRad; donor <- AM$donor; recipient <- AM$recipient; randPick <- AM$randPick
     # Preallocate the relocation array
@@ -674,24 +674,26 @@ assistMigrate<-function(n,N,L,W,temp1d,t,AM){
     
     # Because relocation is occuring, we can update the tLR (time of last relocation) vector
     tLR[SReloc] <- t
-      
+    
+    # We don't need to worry about microhabitats here, so we can flatten out the population array a bit
+    # This makes n1 an SxL matrix
+    nf <- apply(n,c(1,2),sum)
+    
+    # To help with this, set up the populations for each SReloc species into a vector for all patches with microhabitats summed up (SReloc x L)
+    nv <- sapply(SReloc, function(s) c(nf[s,]))
+    
+    NSProps <- colSums(nv)
     ##################################################
     # HOW MANY AND WHICH INDIVIDUALS DO WE RELOCATE? #
     ##################################################
     # Do we pick individuals randomly or just a take a particular amount?
     # NDon is the total number of donated propagules for each species in SReloc
     if(randPick){
-      NDon <- sapply(SReloc, function(s) rbinom(1,N[s],rho[s]))
+      NDon <- sapply(1:SRL, function(s) rbinom(1,NSProps[s],rho[s]))
     } else{
-      NDon <- ceil(N[SReloc]*rho[SReloc])
+      NDon <- ceil(NSProps*rho[SReloc])
     }
     
-    # We don't need to worry about microhabitats here, so we can flatten out the population array a bit
-    # This makes n1 an SxL matrix
-    nf <- apply(n,c(1,2),sum)
-
-    # To help with this, set up the populations for each SReloc species into a vector for all patches with microhabitats summed up (SReloc x L)
-    nv <- sapply(SReloc, function(s) c(nf[s,]))
     
     # Now we pick the actual individuals out of the metapopulations
     # We can pick them in different ways
@@ -763,7 +765,7 @@ assistMigrate<-function(n,N,L,W,temp1d,t,AM){
         # Similarly to above
         for(x in locSs[,s]){
           nXWReloc[s,x,] <- floor(nvReloc[x,s]/W)
-          extras <- sample(1:W,NDonS[s]%%W)
+          extras <- sample(1:W,nvReloc[x,s]%%W)
           nXWReloc[s,x,extras] <- nXWReloc[s,x,extras]+1
         }
       }
@@ -825,7 +827,7 @@ manageSetup <- function(P,X,years=100,
       if(is.null(targs)){targs<-rep(0,S)}
       if(length(targs)>S){stop("targ too long")} else if(length(targs)<1){stop("targ too small")}
       if(all(targs %in% c(0,1))){if(!(length(targs)==S | length(targs)==1)){stop("If using a 0/1 vector, targs needs to be length S")} else if(length(targs)==1){tInds<-targs; targs<-rep(0,S); targs[tInds]<-1}}else
-       if(all(targs %in% 1:S)){tInds<-targs; targs<-rep(0,S); targs[tInds]<-1} else{stop("If using targs as index vector, at least one of your indices were not valid.")}
+        if(all(targs %in% 1:S)){tInds<-targs; targs<-rep(0,S); targs[tInds]<-1} else{stop("If using targs as index vector, at least one of your indices were not valid.")}
     }
     if(!(length(eta)==S | length(eta)==1)){stop("Wrong length")} else if(length(eta)==1){eta<-rep(eta,S)}
     if(!(length(tCD)==S | length(tCD)==1)){stop("Wrong length")} else if(length(tCD)==1){tCD<-rep(tCD,S)}
@@ -935,13 +937,13 @@ commTrim <- function(n,P,X){
 
 
 ###### Useful functions for visualization
-topSpecies <- function(n,L,W){
+topSpecies <- function(n,L,W,S){
   tSpec <- matrix(NA,L,W)
   for(i in 1:L){
     for(j in 1:W){
       nij <- n[,i,j]
       if(sum(nij)>0){
-        nij<-nij+runif(32,0,0.001)
+        nij<-nij+runif(S,0,0.001)
         tSpec[i,j]<-which.max(nij)
       }
     }
@@ -959,10 +961,10 @@ vComSide<-function(n,S){
 
 
 #### Example simulation
-id<-1
+id<-2
 set.seed(id)
 
-S <- 12
+S <- 32
 L <- 512
 W <- 4
 tau <- 0.04
@@ -1000,4 +1002,3 @@ n1f <- cSim2$n
 ct2 <- commTrim(n1f,P1,X1)
 n2 <- ct2$n
 P2 <- ct2$P
-
