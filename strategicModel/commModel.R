@@ -744,8 +744,13 @@ assistMigrate<-function(n,N,L,W,temp1d,t,AM){
     # Which patch is closest to the estimated thermal optimum + xLoc patches ahead
     locS <- sapply(SReloc, function(s) which.min(abs(zEst[s]-temp1d))+xLoc[s])
     # If locS is too big or too small, we need to fix that
-    locS[locS<(1+recRad[SReloc])] <- 1+recRad[SReloc]
-    locS[locS>(L-recRad[SReloc])] <- L-recRad[SReloc]
+    for(s in 1:SRL){
+      if(locS[s]<(1+recRad[SReloc[s]])){
+        loc[s] <- 1+recRad[SReloc[s]]
+      }else if(locS[s]>(L-recRad[SReloc[s]]))
+      locS[s] <- L-recRad[SReloc[s]]
+    }
+
     # Identify the locations that receive inidividuals
     locSs <- sapply(1:SRL, function(s) (locS[s]-recRad[SReloc[s]]):(locS[s]+recRad[SReloc[s]]))
     
@@ -935,6 +940,11 @@ commTrim <- function(n,P,X){
   return(ct)
 }
 
+flatComm <- function(n){
+  # Take a community with subpopulations and flatten it into a single patch each
+  nf <- apply(n,c(1,2),sum)
+  return(nf)
+}
 
 ###### Useful functions for visualization
 topSpecies <- function(n,L,W,S){
@@ -961,7 +971,7 @@ vComSide<-function(n,S){
 
 
 #### Example simulation
-id<-2
+id <- 1
 set.seed(id)
 
 S <- 32
