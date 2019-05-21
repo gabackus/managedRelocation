@@ -1141,26 +1141,26 @@ QGSD <- 32
 iYears<-50
 ccYears<-100
 # Multiple scenarios to try for
-eff<-seq(0,5,by=0.5)
+eff<-seq(0,2.5,by=0.5)
 
 # Store the results here
 cOut<-matrix(NA,length(eff),35)
 sOut<-matrix(NA,S*length(eff),35+26)
 
 # Initialziation
-iSetup<-commSetup(S=S,L=L,W=W,compType="temp",years=iYears+mYears+ccYears,tempLSD = tempLSD,tempYSD=tempYSD,QMean=QMean,QGH=QGH,QGSD=QGSD)
+iSetup<-commSetup(S=S,L=L,W=W,compType="temp",years=iYears+ccYears,tempLSD = tempLSD,tempYSD=tempYSD,QMean=QMean,QGH=QGH,QGSD=QGSD)
 P<-iSetup$P
 X<-iSetup$X
 ni <- array(4,c(P$S,X$L,X$W))
 
 iSim <- commSimulate(ni,P,X,y=1,years=iYears,init=T)
 nif <- iSim$n
-niFlat <- flatComm(mSim$n)
+niFlat <- flatComm(iSim$n)
 
 # Multiple scenario comparisons
 k<-0
-for(j in 1:1){
-  manSetup <- manageSetup(P,X,years=100,corridor=T,corrInstant=T,corrEffort=eff[i]*L)
+for(j in 1:length(eff)){
+  manSetup <- manageSetup(P,X,years=100,corridor=T,corrInstant=T,corrEffort=eff[j]*L)
   jSim <- commSimulate(nif,P,X,y=iYears+1,years=ccYears,manage=manSetup)
   njFlat <- flatComm(jSim$n)
   cOutj<-commData(id,j,X$XW,P$gam,P$sig,P$zo,niFlat,njFlat,iSim$temps,jSim$temps,X$tau)
